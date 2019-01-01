@@ -2,8 +2,6 @@ import sys
 from pathlib import Path
 from math import inf
 import os
-import time
-
 
 
 def ps():
@@ -73,45 +71,53 @@ class Unit():
 
     def get_next_move(self, enemies):
 	#https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
-        
-        # find shortest paths to all enemies 
-        paths_to_enemies = {(enemy.x, enemy.y): [] for enemy in enemies} 
+        unvisited = {(x, y) for x,y in graph}.difference({(unit.x,unit.y) for unit in all_units if unit.alive})
+        enemy_locs = {(enemy.x, enemy.y) for enemy in enemies}
 
-        nearest_enemy_dist = inf
-        nearest_candidates = set()
-        for enemy in paths_to_enemies:
-            paths_to_enemies[enemy] = []
-            unvisited = {(x, y) for x,y in graph}.difference({(unit.x,unit.y) for unit in all_units if unit.alive})
+        # add source and target to unvisited
+        unvisited.add((self.x, self.y))
+        unvisited = unvisited.union(enemy_locs)
 
-            # add source and target to unvisited
-            unvisited.add((self.x, self.y))
-            unvisited.add(enemy)
+        dist = {(x,y): inf for x,y in unvisited} 
+        dist[(self.x, self.y)] = 0
+        prev = {(x,y): [] for x,y in unvisited}
 
-            dist = {(x,y): inf for x,y in unvisited} 
-            dist[(self.x, self.y)] = 0
-            prev = {(x,y): [] for x,y in unvisited}
+        while unvisited:
+            ux, uy = min_distance(dist, unvisited) # min distance from source to unvisited nodes
+            unvisited.remove((ux,uy))
 
-            while unvisited:
-                #breakpoint()
-                ux, uy = min_distance(dist, unvisited) # min distance from source to unvisited nodes
-                unvisited.remove((ux,uy))
+            # process neighbors in reading order
+            neighbors = [n for n in [(ux, uy+1), (ux+1, uy), (ux-1, uy), (ux, uy-1)] 
+                        if (n in graph) and 
+                    (n not in {(unit.x, unit.y) for unit in all_units if unit.alive}.difference(enemy_locs))]
 
-                # process neighbors in reading order
-                neighbors = [n for n in [(ux, uy+1), (ux+1, uy), (ux-1, uy), (ux, uy-1)] 
-                            if (n in graph) and 
-                            (n not in {(unit.x, unit.y) for unit in all_units if unit.alive}.difference({enemy}))]
+            for neighbor in neighbors: 
+                alt = dist[(ux,uy)] + 1
+                if alt <= dist[neighbor]:
+                    dist[neighbor] = alt
+                    prev[neighbor].append((ux,uy))
 
-                for neighbor in neighbors: 
-                    alt = dist[(ux,uy)] + 1
-                    if alt <= dist[neighbor]:
-                        dist[neighbor] = alt
-                        prev[neighbor].append((ux,uy))
+        closest_enemies = []
+        closest_dist = inf
+        for enemy in enemy_locs:
+            if dist[enemy] < closest_dist:
+                closest_enemies = [enemy]
+                closest_dist = dist[enemy]
+            elif dist[enemy] == closest_dist:
+                closest_enemies.append(enemy)
+                closest_dist = dist[enemy]
 
+        if closest_dist == inf:
+            return (self.x, self.y)
+
+        paths_to_enemies = {e: [] for e in closest_enemies} 
+        for e in closest_enemies:
             # if enemy is unreachable continue:
-            if dist[enemy] == inf:
+            if dist[e] == inf:
                 continue
+
             path = []
-            u = enemy
+            u = e
             while u:
                 path.append(u)
                 prev_choices = prev.get(u, None)
@@ -119,28 +125,15 @@ class Unit():
                     u = sorted(prev_choices, key=lambda c: (c[1], c[0]))[0]
                 else:
                     u = None 
-            if path[-1] != (self.x,self.y):  # no path was found  
-                return (self.x, self.y)
+            paths_to_enemies[e] = path
 
-            paths_to_enemies[enemy] = path
-
-            shortest_path_this_enemy = len(path)
-            if shortest_path_this_enemy == nearest_enemy_dist:
-                nearest_candidates.add(enemy)
-            elif shortest_path_this_enemy < nearest_enemy_dist:
-                nearest_enemy_dist = shortest_path_this_enemy
-                nearest_candidates = {enemy}
-
-        if not nearest_candidates:  # no paths found
-            return (self.x, self.y)
-
-        elif len(nearest_candidates) == 1:
-            return paths_to_enemies[nearest_candidates.pop()][-2]
+        if len(paths_to_enemies) == 1:
+            return paths_to_enemies.popitem()[-1][-2]
 
         else:
             # sort by in reading order by location prior to target, not target itself
             # index 1 in path is location just prior to target
-            nearest = sorted(nearest_candidates, key=lambda c:
+            nearest = sorted(closest_enemies, key=lambda c:
                     (paths_to_enemies[c][1][1], paths_to_enemies[c][1][0]))[0]
             return paths_to_enemies[nearest][-2]
                         
@@ -202,15 +195,16 @@ for y, row in enumerate(area[1:-1], 1):
 # initialize elves and goblins 
 elves = UnitList([])
 goblins = UnitList([])
+#ELF_AP = 3  # part 1
+ELF_AP = 17 # part 2 (determined by trial/error)
 for y, row in enumerate(area):
     for x, col in enumerate(row):
         if col == 'E': 
-            elves.units.append(Elf(x, y, ap=17))  # ap=16 for Part 2 (trial and error)
+            elves.units.append(Elf(x, y, ap=ELF_AP))
         elif col == 'G':
             goblins.units.append(Goblin(x, y))
 
 all_units = UnitList(elves.units + goblins.units)
-
 area_string = '\n'.join([''.join(l) for l in area])
 area_string = area_string.replace('E', '.')
 area_string = area_string.replace('G', '.')
@@ -221,15 +215,12 @@ num_elves = len(elves.units)
 round = 0
 ps()
 combat_ends = False
-#BREAK_ROUND = 8
-BREAK_ROUND = 100
 while not combat_ends:
     os.system('clear')
     all_units.reading_sort()
     ps() 
     print(f'\nStart of round: {round+1}\n')
     print(all_units)
-#    input()
 
     for i, unit in enumerate(all_units.units):
         os.system('clear')
@@ -246,9 +237,6 @@ while not combat_ends:
             continue
         print(f'Unit turn: {unit}')
         print('\n'.join([str(su) for su in sorted(all_units.units, key=lambda u: u.hp)]))
-        #time.sleep(.01)
-        #if round + 1 >=BREAK_ROUND:
-        #    input()
         x = unit.x
         y = unit.y
 
@@ -276,25 +264,16 @@ while not combat_ends:
         else:
             combat_ends = True
             break
-
-
     all_units = UnitList(elves.units + goblins.units)
-
 
 os.system('clear')
 ps()
-print(f'\nCombat ended after {round} rounds.\n')
+print(f'\nCombat ended after {round} full rounds.\n')
 print(all_units)
 
 hp_sum = sum([u.hp for u in all_units.units])
 print(f"Part 1 ans: {round*hp_sum}") 
 
-# Part 1 wrong guesses:
-# 180498 (67 rounds)
-# 183192 (68 rounds)
-# 177804 (66 rounds)
-# CORRECT ANSWER:  182376
 
 if len(elves) == num_elves:
     print(f"Part 2 ans: {round*hp_sum}") 
-
