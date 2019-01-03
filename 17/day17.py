@@ -56,42 +56,50 @@ ps()
 sources = [(500,0)]
 prev = grid.copy() 
 prev[:,:] = '.'
-while not np.all(grid == prev):
-    prev = grid.copy()
+drops = 0
+while True: 
+    drops += 1
+    # for each source
 
-    for source_x, source_y in sources:
-        # find first y were either water or clay is encountered
-        y = source_y + 1
-        while y < max_y:
-            if grid[source_x, y] == '.':
-                if grid[source_x, y+1] == '#':
-                    grid[source_x, y] = '~'
-                elif grid[source_x, y+1] == '~':
-                    grid[source_x, y] = '~'
-                else:
-                    grid[source_x, y] = '|'
-
-            elif grid[source_x, y] == '|':
-                if grid[source_x - 1, y] == '.':
-                    grid[source_x - 1,y] = '~'
-                y += 1
-
-            elif grid[source_x, y] in ['~', '#']:
-                # expand left and then right as far as possible at this y
-
-                x = source_x - 1
-                while True: 
-                    if grid[x,y] == '.':
-                        if grid[x,y+1] in ['#', '~']:
-                            grid[x,y] = '~'
-                        else:
-                            grid[x,y+1] = '|'
-                    elif grid[x,y] == '~':
-                        x -= 1
-                    else:
-                        break
-                y += 1
-            input()
-            ps()
+        # fill containers starting with the lowest and leftmost/rightmost point
+        # below the source
 
 
+        # move down from source changing . to | until we hit # or ~ or max_y
+        # if we hit #, check if we can spread left and right
+    x = 500 
+    y = 1 
+    furthest_found = False
+    while not furthest_found:
+        # for each location starting from source:
+        #   first look down, if open, move down and continue 
+        #   otherwise, look left, and if open move left 
+        #       if not open, replace current with water and continue
+        #   otherwise, look right, and if open move right
+        #       if not open, replace current with water, and continue
+        #
+        # find furthest point water can travel from source
+        prev = grid[x,y]
+        grid[x,y]='*'
+        ps()
+        grid[x,y] = prev
+        if grid[x, y+1] == '.':
+            y += 1
+        
+        elif grid[x-1, y] == '.':
+            x -= 1
+
+        elif (grid[x-1,y] in ['#', '~']) and (grid[x,y] == '.'):
+            print("Furthest found")
+            furthest_found = True
+            grid[x,y] = '~'
+
+        elif grid[x+1,y] == '.':
+            x += 1
+
+        elif (grid[x+1,y] in ['#', '~']) and (grid[x,y] == '.'):
+            print("Furthest found")
+            furthest_found = True
+            grid[x,y] = '~'
+
+        input()
