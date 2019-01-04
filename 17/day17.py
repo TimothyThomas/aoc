@@ -39,67 +39,103 @@ for line in lines:
 
     data.append((x_beg, x_end, y_beg, y_end))
 
-grid = np.array([['.']*(max_y+1)]*(max_x+1))
+grid = np.array([['.']*(max_y+2)]*(max_x+2))
 
 for xb, xe, yb, ye in data:
     grid[xb:xe+1,yb:ye+1] = '#'
 
 grid[500,0] = '+'
 
-def ps():
-    #s = '\n'.join([''.join([col for col in row[min_x-1:]]) for row in grid])
-    s = '\n'.join([''.join([col for col in row[min_x-1:]]) for row in grid.T])
+def ps(g):
+    s = '\n'.join([''.join([col for col in row[min_x-3:]]) for row in g.T])
     print(s)
 
-ps()
 
-sources = [(500,0)]
+def find_bottom_from_source(grid, source_x, source_y):
+    bottom_found = False
+    y = source_y
+    x = source_x
+    while not bottom_found:
+        if y+1 > max_y:
+            bottom_found = True
+            bottom_y = y
+        elif grid[x,y+1] == '.':
+            y += 1
+        else:
+            bottom_found = True
+            bottom_y = y
+    return bottom_y
+
+def fill_level(g, x, y):
+    source_x = x
+    left_edge_x = right_edge_x = None  # edge of water (not wall)
+    left_contained = right_contained = False
+    new_sources = [] 
+    while not left_edge_x:
+        if g[x-1,y] in ['#']:  # left contained 
+            left_contained = True
+            left_edge_x = x
+            break
+
+        elif g[x-1,y+1] in ['#', '~']:  # floor extends:
+            x -= 1  # keep searching left
+
+        else:       # hole in floor
+            left_edge_x = x
+            g[left_edge_x-1,y] = '|'
+            new_sources.append((x-1,y))
+
+    x = source_x
+    while not right_edge_x:
+        if g[x+1,y] in ['#']:  # right contained 
+            right_contained = True
+            right_edge_x = x
+            break
+
+        elif g[x+1,y+1] in ['#', '~']:  # floor extends:
+            x += 1  # keep searching right
+        else:       # hole in floor
+            right_edge_x = x
+            g[right_edge_x+1,y] = '|'
+            new_sources.append((x+1,y))
+
+    if left_contained and right_contained:
+        g[left_edge_x:right_edge_x+1,y] = '~'
+        # we may have converted a level that was partially filled with | to all ~, so check if we should add a new
+        # source
+        if np.any(g[left_edge_x:right_edge_x+1,y-1] == '|'):
+            # find left_most index of source
+            new_source_x = int(np.where(g[left_edge_x:right_edge_x+1,y-1]=='|')[0][0]) + left_edge_x
+            new_sources.append((new_source_x,y-1))
+         
+    else:
+        g[left_edge_x:right_edge_x+1,y] = '|'
+
+    return g, new_sources
+
+
+
+sources = {(500,0)}
 prev = grid.copy() 
 prev[:,:] = '.'
-drops = 0
-while True: 
-    drops += 1
-    # for each source
+while sources: 
+    source_x,source_y = sources.pop() 
+    y_bot = max_y+10
+    while source_y != y_bot:
+        y_bot = find_bottom_from_source(grid, source_x, source_y)
 
-        # fill containers starting with the lowest and leftmost/rightmost point
-        # below the source
+        if grid[source_x,y_bot+1] == '|':
+            grid[source_x,y_bot] = '|'
+        elif y_bot == max_y:
+            grid[source_x,y_bot] = '|'
+        else:
+            # find how far left and right y_bot is contained and if water can settle 
+            # at this level (~) or not (|)
+            grid, new_sources = fill_level(grid, source_x, y_bot)
 
+            if new_sources:
+                sources = sources.union(new_sources)
 
-        # move down from source changing . to | until we hit # or ~ or max_y
-        # if we hit #, check if we can spread left and right
-    x = 500 
-    y = 1 
-    furthest_found = False
-    while not furthest_found:
-        # for each location starting from source:
-        #   first look down, if open, move down and continue 
-        #   otherwise, look left, and if open move left 
-        #       if not open, replace current with water and continue
-        #   otherwise, look right, and if open move right
-        #       if not open, replace current with water, and continue
-        #
-        # find furthest point water can travel from source
-        prev = grid[x,y]
-        grid[x,y]='*'
-        ps()
-        grid[x,y] = prev
-        if grid[x, y+1] == '.':
-            y += 1
-        
-        elif grid[x-1, y] == '.':
-            x -= 1
-
-        elif (grid[x-1,y] in ['#', '~']) and (grid[x,y] == '.'):
-            print("Furthest found")
-            furthest_found = True
-            grid[x,y] = '~'
-
-        elif grid[x+1,y] == '.':
-            x += 1
-
-        elif (grid[x+1,y] in ['#', '~']) and (grid[x,y] == '.'):
-            print("Furthest found")
-            furthest_found = True
-            grid[x,y] = '~'
-
-        input()
+ps(grid)
+print(f"Part 1: {np.sum(grid[:,min_y:]=='|') + np.sum(grid[:,min_y:]=='~')}")
+print(f"Part 2: {np.sum(grid[:,min_y:]=='~')}")
